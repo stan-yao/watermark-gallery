@@ -163,12 +163,42 @@ button { font-family: inherit; }
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding: 4px 12px calc(100px + var(--safe-bottom));
+  position: relative;
+}
+
+/* ============ PULL TO REFRESH ============ */
+.pull-indicator {
+  position: absolute;
+  top: -50px;
+  left: 0; right: 0;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  opacity: 0;
+}
+.pull-indicator.visible { opacity: 1; }
+.pull-spinner {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid var(--line);
+  border-top-color: var(--accent-text);
+  transition: transform 0.1s linear;
+}
+.pull-spinner.spinning {
+  animation: pullSpin 0.7s linear infinite;
+}
+@keyframes pullSpin {
+  to { transform: rotate(360deg); }
 }
 
 .masonry-grid {
   display: flex;
   gap: 10px;
   align-items: flex-start;
+  transition: transform 0.2s ease;
 }
 .masonry-col {
   flex: 1;
@@ -698,6 +728,9 @@ button { font-family: inherit; }
     </header>
 
     <div class="home-scroll" id="homeScroll">
+      <div id="pullIndicator" class="pull-indicator">
+        <div class="pull-spinner"></div>
+      </div>
       <div id="masonryGrid" class="masonry-grid">
         <div class="masonry-col" id="masonryColA"></div>
         <div class="masonry-col" id="masonryColB"></div>
@@ -1319,6 +1352,10 @@ const DriveSync = (() => {
   const masonryColA = $('masonryColA');
   const masonryColB = $('masonryColB');
   const homeEmpty = $('homeEmpty');
+  const homeScroll = $('homeScroll');
+  const masonryGrid = $('masonryGrid');
+  const pullIndicator = $('pullIndicator');
+  const pullSpinner = pullIndicator.querySelector('.pull-spinner');
 
   const albumGrid = $('albumGrid');
 
@@ -1532,6 +1569,80 @@ const DriveSync = (() => {
       renderHome();
     }, 150);
   });
+
+  // ============================================
+  // Pull to refresh (home feed)
+  // ============================================
+  const PULL_THRESHOLD = 68; // px of drag before release triggers a refresh
+  const PULL_MAX = 100; // visual cap so the grid doesn't drag too far
+  let pullStartY = null;
+  let pullDistance = 0;
+  let pullRefreshing = false;
+
+  homeScroll.addEventListener('touchstart', (e) => {
+    if (homeScroll.scrollTop <= 0 && !pullRefreshing) {
+      pullStartY = e.touches[0].clientY;
+    } else {
+      pullStartY = null;
+    }
+  }, { passive: true });
+
+  homeScroll.addEventListener('touchmove', (e) => {
+    if (pullStartY === null || pullRefreshing) return;
+    const dy = e.touches[0].clientY - pullStartY;
+    if (dy <= 0) {
+      pullDistance = 0;
+      pullIndicator.classList.remove('visible');
+      masonryGrid.style.transform = '';
+      return;
+    }
+    // Resistance curve so it feels elastic, not 1:1 linear drag
+    pullDistance = Math.min(dy * 0.5, PULL_MAX);
+    pullIndicator.classList.add('visible');
+    pullIndicator.style.transform = `translateY(${pullDistance + 50}px)`;
+    masonryGrid.style.transform = `translateY(${pullDistance}px)`;
+    pullSpinner.style.transform = `rotate(${pullDistance * 3}deg)`;
+  }, { passive: true });
+
+  homeScroll.addEventListener('touchend', () => {
+    if (pullStartY === null || pullRefreshing) {
+      pullStartY = null;
+      return;
+    }
+    if (pullDistance >= PULL_THRESHOLD) {
+      triggerPullRefresh();
+    } else {
+      resetPullVisual();
+    }
+    pullStartY = null;
+    pullDistance = 0;
+  });
+
+  function resetPullVisual() {
+    pullIndicator.classList.remove('visible');
+    pullIndicator.style.transform = '';
+    masonryGrid.style.transform = '';
+    pullSpinner.classList.remove('spinning');
+    pullSpinner.style.transform = '';
+  }
+
+  async function triggerPullRefresh() {
+    pullRefreshing = true;
+    pullIndicator.style.transform = `translateY(${PULL_MAX * 0.7}px)`;
+    masonryGrid.style.transform = `translateY(${PULL_MAX * 0.55}px)`;
+    pullSpinner.classList.add('spinning');
+    pullSpinner.style.transform = '';
+
+    if (DriveSync.connected) {
+      await syncFromDrive();
+    } else {
+      renderHome();
+      showToast('目前未連接 Drive，已重新整理本機資料');
+    }
+
+    resetPullVisual();
+    pullRefreshing = false;
+  }
 
   // ============================================
   // Select mode (batch operations — home + album detail)
@@ -1863,6 +1974,15 @@ const DriveSync = (() => {
     toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
   }
 
+  // Stays visible until explicitly updated/cleared — used for multi-step
+  // progress (e.g. syncing many images) so the toast doesn't fade out
+  // mid-operation and make it look like nothing is happening.
+  function showProgressToast(msg) {
+    clearTimeout(toastTimer);
+    toast.textContent = msg;
+    toast.classList.add('show');
+  }
+
   // ============================================
   // Add images (upload flow)
   // ============================================
@@ -1965,9 +2085,16 @@ const DriveSync = (() => {
       const files = await DriveSync.listFiles();
       const existingIds = new Set(images.map(i => i.driveFileId).filter(Boolean));
       const newOnes = files.filter(f => !existingIds.has(f.id));
-      if (newOnes.length === 0) return;
+      if (newOnes.length === 0) {
+        showToast('已是最新');
+        return;
+      }
 
-      showToast(`從 Drive 讀取 ${newOnes.length} 張新圖片…`);
+      const total = newOnes.length;
+      const RENDER_EVERY = 4; // re-render every N images so long batches show progress instead of appearing frozen
+      let done = 0;
+      showProgressToast(`從 Drive 讀取中… 0 / ${total}`);
+
       for (const f of newOnes) {
         try {
           const blob = await DriveSync.fetchFileBlob(f.id);
@@ -1988,13 +2115,22 @@ const DriveSync = (() => {
         } catch (err) {
           console.error('讀取 Drive 檔案失敗', f.name, err);
         }
+
+        done++;
+        showProgressToast(`從 Drive 讀取中… ${done} / ${total}`);
+
+        if (done % RENDER_EVERY === 0 || done === total) {
+          saveImages();
+          if (screenHome.classList.contains('active')) renderHome();
+          if (screenAlbums.classList.contains('active')) renderAlbumList();
+          if (screenDetail.classList.contains('active')) renderDetailGrid();
+        }
       }
-      saveImages();
-      if (screenHome.classList.contains('active')) renderHome();
-      if (screenAlbums.classList.contains('active')) renderAlbumList();
-      if (screenDetail.classList.contains('active')) renderDetailGrid();
+
+      showToast(`已從 Drive 讀取 ${total} 張新圖片`);
     } catch (err) {
       console.error('Drive 同步失敗', err);
+      showToast('Drive 同步失敗，請稍後再試');
     }
   }
 
