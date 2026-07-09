@@ -865,7 +865,12 @@ const DriveSync = (() => {
     clientId: '229684161854-em72mq4a39bam6s82fqhh1qoqgh3hvi9.apps.googleusercontent.com',
     apiKey: 'AIzaSyBAzixuaexfgb5cnKqTbRsm8hdx2OK_8JE',
     folderId: '1TobtdS3wY87cIIchGvtTxZGBY5xGCDW-',
-    scopes: 'https://www.googleapis.com/auth/drive.file',
+    // NOTE: drive.file only grants access to files this app itself created —
+    // it cannot see files you manually drag into the folder via Drive's own
+    // web UI. Using the broader 'drive' scope lets the app read any file in
+    // your chosen folder regardless of how it got there, while still being
+    // able to upload new ones.
+    scopes: 'https://www.googleapis.com/auth/drive',
   };
 
   let tokenClient = null;
@@ -929,13 +934,23 @@ const DriveSync = (() => {
       });
       gisReady = true;
 
-      // Try silent restore
-      const savedToken = sessionStorage.getItem('drive_access_token');
-      if (savedToken) {
+      // Try restoring a still-valid token first (survives app relaunch,
+      // unlike sessionStorage which iOS often clears when a home-screen
+      // web app is reopened).
+      const savedToken = localStorage.getItem('drive_access_token');
+      const savedExpiry = Number(localStorage.getItem('drive_token_expiry') || 0);
+      if (savedToken && Date.now() < savedExpiry) {
         accessToken = savedToken;
         gapi.client.setToken({ access_token: accessToken });
         connected = true;
         emit('statusChange', { connected: true });
+      } else if (savedToken) {
+        // We've connected before but the token has expired — try to get a
+        // fresh one silently in the background. This can fail quietly
+        // (e.g. iOS Safari blocking the silent flow); if so we just fall
+        // back to the manual "connect" tap, no error shown to the user.
+        clearStoredToken();
+        attemptSilentReauth();
       }
 
       return true;
@@ -945,13 +960,40 @@ const DriveSync = (() => {
     }
   }
 
+  function persistToken(token, expiresInSeconds) {
+    localStorage.setItem('drive_access_token', token);
+    localStorage.setItem('drive_token_expiry', String(Date.now() + (expiresInSeconds || 3500) * 1000));
+  }
+
+  function clearStoredToken() {
+    localStorage.removeItem('drive_access_token');
+    localStorage.removeItem('drive_token_expiry');
+  }
+
+  function attemptSilentReauth() {
+    if (!gisReady) return;
+    tokenClient.callback = (resp) => {
+      if (resp.error) return; // silent failure — user can still tap to connect manually
+      accessToken = resp.access_token;
+      persistToken(accessToken, resp.expires_in);
+      gapi.client.setToken({ access_token: accessToken });
+      connected = true;
+      emit('statusChange', { connected: true });
+    };
+    try {
+      tokenClient.requestAccessToken({ prompt: 'none' });
+    } catch (e) {
+      // ignore — manual connect remains available
+    }
+  }
+
   function requestAccess() {
     return new Promise((resolve, reject) => {
       if (!gisReady) return reject(new Error('Google Identity Services 尚未載入'));
       tokenClient.callback = (resp) => {
         if (resp.error) return reject(resp);
         accessToken = resp.access_token;
-        sessionStorage.setItem('drive_access_token', accessToken);
+        persistToken(accessToken, resp.expires_in);
         gapi.client.setToken({ access_token: accessToken });
         connected = true;
         emit('statusChange', { connected: true });
@@ -967,7 +1009,7 @@ const DriveSync = (() => {
     }
     accessToken = null;
     connected = false;
-    sessionStorage.removeItem('drive_access_token');
+    clearStoredToken();
     emit('statusChange', { connected: false });
   }
 
@@ -1827,7 +1869,6 @@ const DriveSync = (() => {
     try {
       await DriveSync.requestAccess();
       showToast('已連接 Google Drive');
-      syncFromDrive();
     } catch (err) {
       showToast('連接失敗，請再試一次');
     }
@@ -1835,6 +1876,7 @@ const DriveSync = (() => {
 
   DriveSync.on('statusChange', ({ connected }) => {
     driveStatusBtn.dataset.connected = String(connected);
+    if (connected) syncFromDrive();
   });
 
   async function syncFromDrive() {
@@ -1890,11 +1932,7 @@ const DriveSync = (() => {
   // ============================================
   async function init() {
     renderHome();
-    const ok = await DriveSync.init();
-    if (ok && DriveSync.connected) {
-      driveStatusBtn.dataset.connected = 'true';
-      syncFromDrive();
-    }
+    await DriveSync.init();
   }
 
   init();
