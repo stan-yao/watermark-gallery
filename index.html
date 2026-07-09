@@ -1092,11 +1092,88 @@ const DriveSync = (() => {
   //          colorOverride (null|'dark'|'light'), ratio (h/w), addedAt, lastUsedAt }
   // album: { id, name, createdAt }
 
-  const DB_KEY = 'wmg_images_v1';
+  const DB_KEY = 'wmg_images_v1'; // legacy localStorage key, used only for one-time migration
   const ALBUMS_KEY = 'wmg_albums_v1';
   const UNSORTED_ID = '__unsorted__';
 
-  let images = loadJSON(DB_KEY, []);
+  // ---------- IndexedDB layer (images) ----------
+  // localStorage caps out around 5-10MB, which fills up fast when storing
+  // full base64 image data URLs — new images then silently fail to save,
+  // and since renders were gated on save success, the screen wouldn't
+  // update even though anything already sent to Drive succeeded
+  // independently. IndexedDB's quota is far larger (typically hundreds of
+  // MB+), so images live there instead. Albums stay in localStorage since
+  // that data is tiny (just names).
+  const IDB_NAME = 'wmg_db';
+  const IDB_STORE = 'images';
+  let idbInstance = null;
+
+  function openDB() {
+    if (idbInstance) return Promise.resolve(idbInstance);
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) return reject(new Error('IndexedDB not supported'));
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          db.createObjectStore(IDB_STORE, { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = () => { idbInstance = req.result; resolve(idbInstance); };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function idbGetAllImages() {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  // Fully replaces the store's contents to match the given array exactly —
+  // simplest way to keep IndexedDB consistent with the in-memory `images`
+  // array (handles additions, edits, and deletions in one pass).
+  async function idbReplaceAll(imgArr) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      const store = tx.objectStore(IDB_STORE);
+      store.clear();
+      imgArr.forEach(img => store.put(img));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function loadImagesFromStorage() {
+    try {
+      const fromIdb = await idbGetAllImages();
+      if (fromIdb.length > 0) return fromIdb;
+    } catch (e) {
+      console.error('[IDB] 讀取失敗', e);
+    }
+    // One-time migration: if there's old data sitting in localStorage from
+    // before this app used IndexedDB, move it over and free the localStorage
+    // quota it was consuming.
+    const legacy = loadJSON(DB_KEY, []);
+    if (legacy.length > 0) {
+      try {
+        await idbReplaceAll(legacy);
+        localStorage.removeItem(DB_KEY);
+        showToast('已將圖片搬移到新的儲存空間');
+      } catch (e) {
+        console.error('[IDB] 搬移失敗', e);
+      }
+      return legacy;
+    }
+    return [];
+  }
+
+  let images = [];
   let albums = loadJSON(ALBUMS_KEY, []);
 
   function loadJSON(key, fallback) {
@@ -1106,14 +1183,17 @@ const DriveSync = (() => {
     } catch (e) { return fallback; }
   }
 
+  // Persists the current in-memory `images` array to IndexedDB in the
+  // background. Returns true immediately so the UI can update optimistically
+  // rather than waiting on (or being blocked by) the async write — IndexedDB
+  // failures are rare and handled here with a toast rather than by gating
+  // every caller's render logic.
   function saveImages() {
-    try {
-      localStorage.setItem(DB_KEY, JSON.stringify(images));
-      return true;
-    } catch (e) {
-      showToast('儲存空間不足，請刪除一些圖片');
-      return false;
-    }
+    idbReplaceAll(images).catch((e) => {
+      console.error('[IDB] 儲存失敗', e);
+      showToast('儲存失敗，請稍後再試');
+    });
+    return true;
   }
 
   function saveAlbums() {
@@ -1931,6 +2011,7 @@ const DriveSync = (() => {
   // Init
   // ============================================
   async function init() {
+    images = await loadImagesFromStorage();
     renderHome();
     await DriveSync.init();
   }
