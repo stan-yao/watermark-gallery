@@ -1,0 +1,1906 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a0c">
+<title>Watermark Gallery</title>
+<style>
+/* ============================================
+   Watermark Gallery — Design Tokens
+   Near-black gallery aesthetic, bold display type,
+   Klein Blue accent. Mobile-only, iOS-tuned.
+   Pinterest-style masonry home feed.
+   ============================================ */
+
+:root {
+  --bg: #0a0a0c;
+  --surface: #141418;
+  --surface-2: #1c1c22;
+  --surface-3: #26262e;
+  --line: #2a2a32;
+  --line-soft: #1e1e24;
+
+  --text: #f2f2f5;
+  --text-dim: #8b8b96;
+  --text-faint: #57575f;
+
+  /* Klein Blue */
+  --accent: #002FA7;
+  --accent-soft: rgba(0, 47, 167, 0.22);
+  --accent-text: #5c7cf0;
+
+  --danger: #ff4d4d;
+  --danger-soft: rgba(255, 77, 77, 0.14);
+
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang TC", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  position: relative;
+  height: 100vh;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+}
+
+button { font-family: inherit; }
+
+/* ============ SCREENS ============ */
+.screen {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  background: var(--bg);
+}
+.screen.active { display: flex; }
+
+/* ============ TOPBAR ============ */
+.topbar {
+  padding: calc(var(--safe-top) + 18px) 20px 14px;
+  flex-shrink: 0;
+}
+
+.topbar-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.app-title {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.5px;
+  margin: 0;
+  color: var(--text);
+}
+
+.topbar-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.icon-pill {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.icon-pill:active { background: var(--surface-2); }
+
+.drive-status {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.drive-status .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.drive-status[data-connected="true"] .dot { background: #3ddc84; }
+
+.search-row { margin-top: 2px; }
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 11px 14px;
+  color: var(--text-faint);
+}
+.search-field input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 15px;
+}
+.search-field input::placeholder { color: var(--text-faint); }
+
+/* ============ MASONRY (Pinterest-style) ============ */
+.home-scroll, .detail-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px 12px calc(100px + var(--safe-bottom));
+}
+
+.masonry-grid {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.masonry-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mcard {
+  position: relative;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* background-color set per-item via JS: light or dark based on detected text color */
+}
+.mcard img {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: contain;
+  padding: 10%;
+}
+.mcard .mcard-label {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  padding: 16px 10px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.92);
+  background: linear-gradient(transparent, rgba(0,0,0,0.5));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.mcard .mcard-check {
+  position: absolute;
+  top: 7px; right: 7px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: rgba(10,10,12,0.55);
+  border: 1.5px solid rgba(255,255,255,0.55);
+  z-index: 2;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.mcard.selectable .mcard-check { display: flex; }
+.mcard.selected .mcard-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.mcard.selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+.mcard.selected::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: rgba(0,47,167,0.2);
+  z-index: 1;
+}
+
+/* ============ ALBUM GRID (Albums screen) ============ */
+.albums-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px 20px calc(40px + var(--safe-bottom));
+}
+
+.album-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.album-card { cursor: pointer; }
+
+.album-cover {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 9px;
+}
+.album-cover img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  padding: 14%;
+}
+.album-cover.empty {
+  color: var(--text-faint);
+  font-size: 26px;
+  font-weight: 300;
+}
+.album-cover .cover-count-badge {
+  position: absolute;
+  top: 8px; right: 8px;
+  background: rgba(10,10,12,0.72);
+  backdrop-filter: blur(6px);
+  color: var(--text);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 100px;
+}
+
+.album-name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.album-meta {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 1px;
+}
+
+.album-card.new-album .album-cover {
+  border-style: dashed;
+  color: var(--text-faint);
+  flex-direction: column;
+  gap: 4px;
+}
+.album-card.new-album .album-cover span {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ============ FAB ============ */
+.fab {
+  position: absolute;
+  right: 20px;
+  bottom: calc(28px + var(--safe-bottom));
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(0, 47, 167, 0.5), 0 2px 8px rgba(0,0,0,0.3);
+  cursor: pointer;
+  z-index: 20;
+  transition: transform 0.12s ease;
+}
+.fab:active { transform: scale(0.92); }
+
+/* ============ DETAIL / ALBUMS TOPBAR ============ */
+.topbar-detail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(var(--safe-top) + 14px) 14px 14px;
+}
+.icon-btn {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.icon-btn:active { background: var(--surface-2); }
+.back-btn svg { margin-left: -2px; }
+
+.detail-title-wrap { flex: 1; min-width: 0; }
+.detail-title {
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.detail-count {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 70px 30px;
+  color: var(--text-faint);
+}
+.empty-glyph { font-size: 30px; margin-bottom: 10px; color: var(--text-faint); }
+.empty-title { font-size: 14.5px; font-weight: 700; color: var(--text-dim); margin: 0 0 4px; }
+.empty-sub { font-size: 13px; margin: 0; line-height: 1.5; }
+
+/* ============ BATCH BAR ============ */
+.batch-bar {
+  position: absolute;
+  left: 14px; right: 14px;
+  bottom: calc(20px + var(--safe-bottom));
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px 10px 10px 16px;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  z-index: 25;
+}
+.batch-bar.active { display: flex; }
+.batch-count { font-size: 13px; font-weight: 700; flex: 1; }
+.batch-actions { display: flex; gap: 6px; }
+.batch-btn {
+  background: var(--surface-3);
+  border: none;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 100px;
+  cursor: pointer;
+}
+.batch-btn.danger { color: var(--danger); background: var(--danger-soft); }
+.batch-cancel {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 4px;
+  cursor: pointer;
+}
+
+/* ============ VIEWER / LIGHTBOX ============ */
+.viewer {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 100;
+  display: none;
+  flex-direction: column;
+}
+.viewer.open { display: flex; }
+
+.viewer-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(var(--safe-top) + 12px) 16px 10px;
+  flex-shrink: 0;
+}
+.viewer-topbar .icon-btn {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.1);
+}
+.viewer-counter {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.viewer-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 20px;
+  min-height: 0;
+}
+
+.viewer-frame {
+  width: 100%;
+  max-width: 480px;
+  max-height: 100%;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.25s ease;
+  /* background-color set dynamically by JS: light or dark based on detected text color */
+}
+
+.viewer-frame img {
+  max-width: 100%;
+  max-height: 78vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  padding: 10%;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: default; /* allow iOS long-press menu */
+}
+
+.viewer-bottom {
+  flex-shrink: 0;
+  padding: 14px 20px calc(20px + var(--safe-bottom));
+}
+
+.viewer-name {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.viewer-hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-bottom: 16px;
+}
+
+.viewer-actions {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+.viewer-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 10px 4px;
+  cursor: pointer;
+}
+.viewer-action.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.viewer-action.danger { color: var(--danger); }
+.viewer-action:active { opacity: 0.7; }
+
+/* ============ BOTTOM SHEET ============ */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 150;
+  display: none;
+  align-items: flex-end;
+}
+.sheet-overlay.open { display: flex; }
+
+.sheet {
+  width: 100%;
+  background: var(--surface);
+  border-radius: 22px 22px 0 0;
+  border: 1px solid var(--line);
+  border-bottom: none;
+  padding: 10px 20px calc(24px + var(--safe-bottom));
+  max-height: 75vh;
+  overflow-y: auto;
+  transform: translateY(0);
+  animation: sheetUp 0.22s ease;
+}
+@keyframes sheetUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.sheet-handle {
+  width: 36px; height: 4px;
+  border-radius: 100px;
+  background: var(--line);
+  margin: 6px auto 16px;
+}
+
+.sheet-title {
+  font-size: 17px;
+  font-weight: 800;
+  margin: 0 0 16px;
+  letter-spacing: -0.2px;
+}
+
+.sheet-option-list { display: flex; flex-direction: column; gap: 4px; }
+.sheet-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 6px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+.sheet-option:last-child { border-bottom: none; }
+.sheet-option .opt-thumb {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--text-faint);
+  overflow: hidden;
+}
+.sheet-option .opt-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+.sheet-option .opt-label { flex: 1; }
+.sheet-option .opt-check { color: var(--accent-text); display: none; }
+.sheet-option.checked .opt-check { display: block; }
+
+.sheet-input {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 13px 14px;
+  color: var(--text);
+  font-size: 15px;
+  outline: none;
+  margin-bottom: 12px;
+}
+.sheet-input:focus { border-color: var(--accent-text); }
+
+.sheet-btn-row { display: flex; gap: 8px; margin-top: 4px; }
+.sheet-btn {
+  flex: 1;
+  padding: 13px;
+  border-radius: var(--radius-md);
+  border: none;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sheet-btn.primary { background: var(--accent); color: #fff; }
+.sheet-btn.secondary { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); }
+.sheet-btn.danger { background: var(--danger-soft); color: var(--danger); }
+
+.sheet-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin: -6px 0 14px;
+  line-height: 1.5;
+}
+
+/* ============ TOAST ============ */
+.toast {
+  position: fixed;
+  top: calc(var(--safe-top) + 16px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-14px);
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 11px 18px;
+  border-radius: 100px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 300;
+  white-space: nowrap;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ============ Scrollbar cleanup ============ */
+.home-scroll::-webkit-scrollbar,
+.detail-scroll::-webkit-scrollbar,
+.albums-scroll::-webkit-scrollbar,
+.sheet::-webkit-scrollbar { display: none; }
+
+</style>
+</head>
+<body>
+
+<!-- ===== APP SHELL ===== -->
+<div id="app">
+
+  <!-- ---------- SCREEN: Home (masonry feed of ALL images) ---------- -->
+  <section id="screen-home" class="screen active">
+    <header class="topbar">
+      <div class="topbar-title-row">
+        <h1 class="app-title">Watermark<br>Gallery</h1>
+        <div class="topbar-btns">
+          <button id="homeSelectModeBtn" class="icon-pill" aria-label="多選">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+          <button id="albumsNavBtn" class="icon-pill" aria-label="相簿">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+          <button id="driveStatusBtn" class="drive-status" data-connected="false">
+            <span class="dot"></span>
+          </button>
+        </div>
+      </div>
+      <div class="search-row">
+        <div class="search-field">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <input id="searchInput" type="text" placeholder="搜尋浮水印名稱" autocomplete="off">
+        </div>
+      </div>
+    </header>
+
+    <div class="home-scroll" id="homeScroll">
+      <div id="masonryGrid" class="masonry-grid">
+        <div class="masonry-col" id="masonryColA"></div>
+        <div class="masonry-col" id="masonryColB"></div>
+      </div>
+      <div id="homeEmpty" class="empty-state" style="display:none;">
+        <div class="empty-glyph">◇</div>
+        <p class="empty-title">還沒有收藏任何浮水印</p>
+        <p class="empty-sub">點右下角「＋」開始匯入</p>
+      </div>
+    </div>
+
+    <button id="fabAdd" class="fab" aria-label="新增圖片">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+    </button>
+
+    <!-- Batch action bar (home) -->
+    <div id="homeBatchBar" class="batch-bar">
+      <span id="homeBatchCount" class="batch-count">已選 0 張</span>
+      <div class="batch-actions">
+        <button id="homeBatchMove" class="batch-btn">搬移</button>
+        <button id="homeBatchDelete" class="batch-btn danger">刪除</button>
+      </div>
+      <button id="homeBatchCancel" class="batch-cancel">取消</button>
+    </div>
+  </section>
+
+  <!-- ---------- SCREEN: Albums list ---------- -->
+  <section id="screen-albums" class="screen">
+    <header class="topbar topbar-detail">
+      <button id="backFromAlbums" class="icon-btn back-btn" aria-label="返回">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="detail-title-wrap">
+        <h2 class="detail-title">相簿</h2>
+      </div>
+    </header>
+
+    <div class="albums-scroll">
+      <div id="albumGrid" class="album-grid"></div>
+    </div>
+  </section>
+
+  <!-- ---------- SCREEN: Album Detail (masonry within one album) ---------- -->
+  <section id="screen-detail" class="screen">
+    <header class="topbar topbar-detail">
+      <button id="backToAlbums" class="icon-btn back-btn" aria-label="返回">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="detail-title-wrap">
+        <h2 id="detailTitle" class="detail-title">相簿</h2>
+        <span id="detailCount" class="detail-count">0 張</span>
+      </div>
+      <button id="selectModeBtn" class="icon-btn" aria-label="多選">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="2"/></svg>
+      </button>
+    </header>
+
+    <div class="detail-scroll" id="detailScroll">
+      <div id="detailMasonry" class="masonry-grid">
+        <div class="masonry-col" id="detailColA"></div>
+        <div class="masonry-col" id="detailColB"></div>
+      </div>
+      <div id="detailEmpty" class="empty-state" style="display:none;">
+        <div class="empty-glyph">◇</div>
+        <p class="empty-title">這個相簿還沒有圖片</p>
+        <p class="empty-sub">點右下角「＋」新增浮水印</p>
+      </div>
+    </div>
+
+    <button id="fabAddToAlbum" class="fab" aria-label="新增圖片">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+    </button>
+
+    <!-- Batch action bar -->
+    <div id="batchBar" class="batch-bar">
+      <span id="batchCount" class="batch-count">已選 0 張</span>
+      <div class="batch-actions">
+        <button id="batchMove" class="batch-btn">搬移</button>
+        <button id="batchDelete" class="batch-btn danger">刪除</button>
+      </div>
+      <button id="batchCancel" class="batch-cancel">取消</button>
+    </div>
+  </section>
+
+  <!-- ---------- LIGHTBOX / VIEWER ---------- -->
+  <div id="viewer" class="viewer">
+    <div class="viewer-topbar">
+      <button id="viewerClose" class="icon-btn" aria-label="關閉">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
+      <span id="viewerCounter" class="viewer-counter"></span>
+      <span class="icon-btn" style="visibility:hidden;"></span>
+    </div>
+
+    <div class="viewer-stage" id="viewerStage">
+      <div class="viewer-frame" id="viewerFrame">
+        <img id="viewerImg" src="" alt="watermark" draggable="false">
+      </div>
+    </div>
+
+    <div class="viewer-bottom">
+      <div class="viewer-name" id="viewerName"></div>
+      <div class="viewer-hint">長按圖片可直接「拷貝照片」</div>
+      <div class="viewer-actions">
+        <button id="viewerCopyBtn" class="viewer-action primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15V5a2 2 0 012-2h10" stroke="currentColor" stroke-width="2"/></svg>
+          複製
+        </button>
+        <button id="viewerInvertBtn" class="viewer-action">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 000 18z" fill="currentColor"/></svg>
+          切換底色
+        </button>
+        <button id="viewerMoveBtn" class="viewer-action">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 7h18M3 7l3-4h12l3 4M3 7v12a1 1 0 001 1h16a1 1 0 001-1V7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          相簿
+        </button>
+        <button id="viewerRenameBtn" class="viewer-action">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          重新命名
+        </button>
+        <button id="viewerDeleteBtn" class="viewer-action danger">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H7a1 1 0 01-1-1V6h12z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          刪除
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- Bottom sheet: generic (album picker / new album / rename) ---------- -->
+  <div id="sheetOverlay" class="sheet-overlay">
+    <div id="sheet" class="sheet">
+      <div class="sheet-handle"></div>
+      <div id="sheetContent"></div>
+    </div>
+  </div>
+
+  <!-- ---------- Toast ---------- -->
+  <div id="toast" class="toast"></div>
+
+  <!-- Hidden file input -->
+  <input type="file" id="fileInput" accept="image/png,image/webp" multiple style="display:none;">
+
+</div>
+
+<script>
+/* ============================================
+   drive.js — Google Drive integration
+   ============================================
+   HOW TO ACTIVATE:
+   1. Go to https://console.cloud.google.com/
+   2. Create a project → Enable "Google Drive API"
+   3. Create OAuth 2.0 Client ID (type: Web application)
+      - Add your GitHub Pages URL to "Authorized JavaScript origins"
+        e.g. https://yourname.github.io
+   4. Create an API key (restrict it to Drive API for safety)
+   5. Fill in CONFIG below with your client ID + API key
+   6. Create a folder in your Google Drive for watermarks,
+      open it, copy the folder ID from the URL
+      (the string after /folders/), paste into CONFIG.folderId
+   ============================================ */
+
+const DriveSync = (() => {
+
+  const CONFIG = {
+    clientId: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+    apiKey: 'YOUR_GOOGLE_API_KEY',
+    folderId: 'YOUR_DRIVE_FOLDER_ID',
+    scopes: 'https://www.googleapis.com/auth/drive.file',
+  };
+
+  let tokenClient = null;
+  let accessToken = null;
+  let gapiReady = false;
+  let gisReady = false;
+  let connected = false;
+
+  const listeners = { statusChange: [] };
+
+  function on(event, cb) {
+    if (listeners[event]) listeners[event].push(cb);
+  }
+
+  function emit(event, payload) {
+    (listeners[event] || []).forEach(cb => cb(payload));
+  }
+
+  function isConfigured() {
+    return CONFIG.clientId && !CONFIG.clientId.startsWith('YOUR_')
+      && CONFIG.apiKey && !CONFIG.apiKey.startsWith('YOUR_')
+      && CONFIG.folderId && !CONFIG.folderId.startsWith('YOUR_');
+  }
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
+  async function init() {
+    if (!isConfigured()) {
+      console.warn('[DriveSync] 尚未設定 API 金鑰，Drive 同步功能停用。僅使用本機儲存。');
+      return false;
+    }
+    try {
+      await Promise.all([
+        loadScript('https://apis.google.com/js/api.js'),
+        loadScript('https://accounts.google.com/gsi/client'),
+      ]);
+
+      await new Promise((resolve) => {
+        gapi.load('client', async () => {
+          await gapi.client.init({
+            apiKey: CONFIG.apiKey,
+            discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
+          });
+          gapiReady = true;
+          resolve();
+        });
+      });
+
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CONFIG.clientId,
+        scope: CONFIG.scopes,
+        callback: '', // set dynamically on requestAccess
+      });
+      gisReady = true;
+
+      // Try silent restore
+      const savedToken = sessionStorage.getItem('drive_access_token');
+      if (savedToken) {
+        accessToken = savedToken;
+        gapi.client.setToken({ access_token: accessToken });
+        connected = true;
+        emit('statusChange', { connected: true });
+      }
+
+      return true;
+    } catch (err) {
+      console.error('[DriveSync] 初始化失敗', err);
+      return false;
+    }
+  }
+
+  function requestAccess() {
+    return new Promise((resolve, reject) => {
+      if (!gisReady) return reject(new Error('Google Identity Services 尚未載入'));
+      tokenClient.callback = (resp) => {
+        if (resp.error) return reject(resp);
+        accessToken = resp.access_token;
+        sessionStorage.setItem('drive_access_token', accessToken);
+        gapi.client.setToken({ access_token: accessToken });
+        connected = true;
+        emit('statusChange', { connected: true });
+        resolve(resp);
+      };
+      tokenClient.requestAccessToken({ prompt: '' });
+    });
+  }
+
+  function disconnect() {
+    if (accessToken) {
+      google.accounts.oauth2.revoke(accessToken, () => {});
+    }
+    accessToken = null;
+    connected = false;
+    sessionStorage.removeItem('drive_access_token');
+    emit('statusChange', { connected: false });
+  }
+
+  async function listFiles() {
+    if (!connected) return [];
+    const res = await gapi.client.drive.files.list({
+      q: `'${CONFIG.folderId}' in parents and trashed = false and (mimeType = 'image/png' or mimeType = 'image/webp')`,
+      fields: 'files(id, name, mimeType, thumbnailLink, webContentLink, createdTime)',
+      pageSize: 200,
+    });
+    return res.result.files || [];
+  }
+
+  async function downloadFileAsDataURL(fileId) {
+    const res = await gapi.client.drive.files.get({
+      fileId,
+      alt: 'media',
+    });
+    // gapi returns raw body as string for binary — use fetch instead for binary safety
+    return res;
+  }
+
+  async function uploadFile(file) {
+    if (!connected) throw new Error('尚未連接 Drive');
+    const metadata = {
+      name: file.name,
+      parents: [CONFIG.folderId],
+    };
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', file);
+
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webContentLink', {
+      method: 'POST',
+      headers: new Headers({ Authorization: 'Bearer ' + accessToken }),
+      body: form,
+    });
+    if (!res.ok) throw new Error('上傳失敗: ' + res.status);
+    return res.json();
+  }
+
+  async function deleteFile(fileId) {
+    if (!connected) return;
+    await gapi.client.drive.files.delete({ fileId });
+  }
+
+  async function fetchFileBlob(fileId) {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      headers: { Authorization: 'Bearer ' + accessToken },
+    });
+    if (!res.ok) throw new Error('讀取檔案失敗');
+    return res.blob();
+  }
+
+  return {
+    init,
+    isConfigured,
+    requestAccess,
+    disconnect,
+    listFiles,
+    uploadFile,
+    deleteFile,
+    fetchFileBlob,
+    on,
+    get connected() { return connected; },
+  };
+})();
+
+</script>
+<script>
+/* ============================================
+   Watermark Gallery — App Logic
+   ============================================ */
+
+(() => {
+  'use strict';
+
+  // ---------- Data model ----------
+  // image: { id, name, dataUrl, albumId, driveFileId, textColor ('dark'|'light'),
+  //          colorOverride (null|'dark'|'light'), ratio (h/w), addedAt, lastUsedAt }
+  // album: { id, name, createdAt }
+
+  const DB_KEY = 'wmg_images_v1';
+  const ALBUMS_KEY = 'wmg_albums_v1';
+  const UNSORTED_ID = '__unsorted__';
+
+  let images = loadJSON(DB_KEY, []);
+  let albums = loadJSON(ALBUMS_KEY, []);
+
+  function loadJSON(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) { return fallback; }
+  }
+
+  function saveImages() {
+    try {
+      localStorage.setItem(DB_KEY, JSON.stringify(images));
+      return true;
+    } catch (e) {
+      showToast('儲存空間不足，請刪除一些圖片');
+      return false;
+    }
+  }
+
+  function saveAlbums() {
+    localStorage.setItem(ALBUMS_KEY, JSON.stringify(albums));
+  }
+
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  // ---------- Blob URL cache ----------
+  // iOS long-press "Copy Photo" is far more reliable against a real Blob
+  // object than against a data: URL string. We keep data URLs as the
+  // source of truth in localStorage (simple, portable), but render every
+  // <img> from a Blob URL derived on demand, cached per image id so we're
+  // not re-decoding on every re-render. Old URLs for a given id are
+  // revoked when replaced to avoid leaking memory over a long session.
+  const blobUrlCache = new Map(); // id -> objectURL
+
+  async function getBlobUrl(image) {
+    if (blobUrlCache.has(image.id)) return blobUrlCache.get(image.id);
+    const resp = await fetch(image.dataUrl);
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    blobUrlCache.set(image.id, url);
+    return url;
+  }
+
+  function revokeBlobUrl(id) {
+    const url = blobUrlCache.get(id);
+    if (url) {
+      URL.revokeObjectURL(url);
+      blobUrlCache.delete(id);
+    }
+  }
+
+  // ---------- Image analysis: text color + aspect ratio ----------
+  // Detects whether watermark strokes are predominantly black or white
+  // (to choose a contrasting preview background), and captures the
+  // image's true aspect ratio so previews aren't forced into squares.
+  function analyzeImage(dataUrl) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const naturalRatio = img.naturalHeight / img.naturalWidth || 1;
+        try {
+          const canvas = document.createElement('canvas');
+          const w = canvas.width = Math.min(img.naturalWidth, 200);
+          const h = canvas.height = Math.min(img.naturalHeight, 200);
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const data = ctx.getImageData(0, 0, w, h).data;
+
+          let totalLum = 0;
+          let count = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            const alpha = data[i + 3];
+            if (alpha < 40) continue; // skip transparent
+            const r = data[i], g = data[i + 1], b = data[i + 2];
+            const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            totalLum += lum;
+            count++;
+          }
+          if (count === 0) return resolve({ textColor: 'dark', ratio: naturalRatio });
+          const avg = totalLum / count;
+          // avg close to 0 = black strokes -> needs LIGHT preview bg
+          // avg close to 255 = white strokes -> needs DARK preview bg
+          const textColor = avg < 128 ? 'light' : 'dark'; // value = what preview bg should be
+          resolve({ textColor, ratio: naturalRatio });
+        } catch (e) {
+          resolve({ textColor: 'dark', ratio: naturalRatio });
+        }
+      };
+      img.onerror = () => resolve({ textColor: 'dark', ratio: 1 });
+      img.src = dataUrl;
+    });
+  }
+
+  function previewBg(image) {
+    const mode = image.colorOverride || image.textColor || 'dark';
+    return mode === 'light' ? '#f4f4f6' : '#0a0a0c';
+  }
+
+  // Clamp extreme aspect ratios so a very tall/thin image doesn't
+  // dominate the whole feed — still respects real proportions within reason.
+  function clampedRatio(image) {
+    const r = image.ratio || 1;
+    return Math.min(Math.max(r, 0.5), 2.2);
+  }
+
+  // ---------- Album helpers ----------
+  function getAlbumImages(albumId) {
+    if (albumId === UNSORTED_ID) return images.filter(i => !i.albumId || i.albumId === UNSORTED_ID);
+    return images.filter(i => i.albumId === albumId);
+  }
+
+  function getAlbumCover(albumId) {
+    const imgs = getAlbumImages(albumId);
+    return imgs.length ? imgs[imgs.length - 1] : null;
+  }
+
+  function albumName(albumId) {
+    if (albumId === UNSORTED_ID) return '未分類';
+    const a = albums.find(a => a.id === albumId);
+    return a ? a.name : '未分類';
+  }
+
+  // ---------- State ----------
+  let currentAlbumId = null;
+  let currentGridList = []; // images currently shown in the open grid (for viewer nav)
+  let viewerSource = 'home'; // 'home' | 'detail' — where the viewer was opened from
+  let viewerIndex = 0;
+  let selectMode = false;
+  let selectedIds = new Set();
+  let searchQuery = '';
+
+  // ---------- DOM refs ----------
+  const $ = (id) => document.getElementById(id);
+  const screenHome = $('screen-home');
+  const screenAlbums = $('screen-albums');
+  const screenDetail = $('screen-detail');
+
+  const masonryColA = $('masonryColA');
+  const masonryColB = $('masonryColB');
+  const homeEmpty = $('homeEmpty');
+
+  const albumGrid = $('albumGrid');
+
+  const detailColA = $('detailColA');
+  const detailColB = $('detailColB');
+  const detailTitle = $('detailTitle');
+  const detailCount = $('detailCount');
+  const detailEmpty = $('detailEmpty');
+
+  const searchInput = $('searchInput');
+  const fileInput = $('fileInput');
+  const driveStatusBtn = $('driveStatusBtn');
+
+  const viewer = $('viewer');
+  const viewerFrame = $('viewerFrame');
+  const viewerImg = $('viewerImg');
+  const viewerName = $('viewerName');
+  const viewerCounter = $('viewerCounter');
+
+  const sheetOverlay = $('sheetOverlay');
+  const sheetContent = $('sheetContent');
+  const toast = $('toast');
+
+  const batchBar = $('batchBar');
+  const batchCount = $('batchCount');
+
+  let pendingUploadAlbumId = null; // which album new uploads should go to
+
+  // ============================================
+  // RENDER: Home masonry feed (all images)
+  // ============================================
+  function renderHome() {
+    let imgs = [...images];
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      imgs = imgs.filter(i => i.name.toLowerCase().includes(q));
+    }
+
+    imgs.sort((a, b) => (b.lastUsedAt || b.addedAt) - (a.lastUsedAt || a.addedAt));
+
+    currentGridList = imgs;
+    masonryColA.innerHTML = '';
+    masonryColB.innerHTML = '';
+
+    if (imgs.length === 0) {
+      homeEmpty.style.display = 'block';
+      return;
+    }
+    homeEmpty.style.display = 'none';
+
+    distributeToColumns(imgs, masonryColA, masonryColB, (img, idx) => openViewer(idx, 'home'));
+  }
+
+  // Distributes images across two columns, tracking running height so the
+  // feed stays visually balanced (classic masonry approach) rather than
+  // simple even/odd alternation.
+  function distributeToColumns(imgs, colA, colB, onOpen) {
+    let heightA = 0, heightB = 0;
+    imgs.forEach((img, idx) => {
+      const ratio = clampedRatio(img);
+      const target = heightA <= heightB ? colA : colB;
+      if (target === colA) heightA += ratio; else heightB += ratio;
+      target.appendChild(buildMasonryCard(img, idx, onOpen));
+    });
+  }
+
+  function buildMasonryCard(img, idx, onOpen) {
+    const card = document.createElement('div');
+    const ratio = clampedRatio(img);
+    card.className = 'mcard' + (selectMode ? ' selectable' : '') + (selectedIds.has(img.id) ? ' selected' : '');
+    card.style.background = previewBg(img);
+    card.style.aspectRatio = `1 / ${ratio}`;
+    card.innerHTML = `
+      <img alt="${escapeHtml(img.name)}" loading="lazy">
+      <div class="mcard-label">${escapeHtml(img.name)}</div>
+      <div class="mcard-check">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    `;
+    const imgEl = card.querySelector('img');
+    getBlobUrl(img).then(url => { imgEl.src = url; }).catch(() => { imgEl.src = img.dataUrl; });
+
+    card.addEventListener('click', () => {
+      if (selectMode) {
+        toggleSelect(img.id, card);
+      } else {
+        onOpen(img, idx);
+      }
+    });
+    return card;
+  }
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  // ============================================
+  // RENDER: Albums list screen
+  // ============================================
+  function renderAlbumList() {
+    albumGrid.innerHTML = '';
+
+    albums.forEach(a => {
+      albumGrid.appendChild(buildAlbumCard(a));
+    });
+
+    const unsortedCount = getAlbumImages(UNSORTED_ID).length;
+    if (unsortedCount > 0) {
+      albumGrid.appendChild(buildAlbumCard({ id: UNSORTED_ID, name: '未分類' }));
+    }
+
+    const newTile = document.createElement('div');
+    newTile.className = 'album-card new-album';
+    newTile.innerHTML = `
+      <div class="album-cover">
+        <span>＋</span>
+        <span>新增相簿</span>
+      </div>
+    `;
+    newTile.addEventListener('click', () => openNewAlbumSheet());
+    albumGrid.appendChild(newTile);
+  }
+
+  function buildAlbumCard(album) {
+    const card = document.createElement('div');
+    card.className = 'album-card';
+    const imgs = getAlbumImages(album.id);
+    const cover = getAlbumCover(album.id);
+
+    const coverInner = cover
+      ? `<img src="${cover.dataUrl}" alt="">`
+      : `<span>◇</span>`;
+
+    card.innerHTML = `
+      <div class="album-cover ${cover ? '' : 'empty'}" style="${cover ? `background:${previewBg(cover)};` : ''}">
+        ${coverInner}
+        <span class="cover-count-badge">${imgs.length}</span>
+      </div>
+      <div class="album-name">${escapeHtml(album.name)}</div>
+      <div class="album-meta">${imgs.length} 張</div>
+    `;
+    card.addEventListener('click', () => openAlbum(album.id));
+    return card;
+  }
+
+  // ============================================
+  // RENDER: Album Detail (masonry within one album)
+  // ============================================
+  function openAlbum(albumId) {
+    currentAlbumId = albumId;
+    exitSelectMode();
+    switchScreen('detail');
+    renderDetailGrid();
+  }
+
+  function renderDetailGrid() {
+    detailTitle.textContent = albumName(currentAlbumId);
+    let imgs = getAlbumImages(currentAlbumId);
+
+    imgs = [...imgs].sort((a, b) => (b.lastUsedAt || b.addedAt) - (a.lastUsedAt || a.addedAt));
+
+    currentGridList = imgs;
+    detailCount.textContent = `${imgs.length} 張`;
+    detailColA.innerHTML = '';
+    detailColB.innerHTML = '';
+
+    if (imgs.length === 0) {
+      detailEmpty.style.display = 'block';
+      return;
+    }
+    detailEmpty.style.display = 'none';
+
+    distributeToColumns(imgs, detailColA, detailColB, (img, idx) => openViewer(idx, 'detail'));
+  }
+
+  // ============================================
+  // Screen switching
+  // ============================================
+  function switchScreen(name) {
+    screenHome.classList.toggle('active', name === 'home');
+    screenAlbums.classList.toggle('active', name === 'albums');
+    screenDetail.classList.toggle('active', name === 'detail');
+    if (name === 'home') renderHome();
+    if (name === 'albums') renderAlbumList();
+  }
+
+  $('albumsNavBtn').addEventListener('click', () => {
+    exitSelectMode();
+    switchScreen('albums');
+  });
+  $('backFromAlbums').addEventListener('click', () => {
+    exitSelectMode();
+    switchScreen('home');
+  });
+  $('backToAlbums').addEventListener('click', () => {
+    exitSelectMode();
+    switchScreen('albums');
+  });
+
+  // ============================================
+  // Search (operates on home feed)
+  // ============================================
+  let searchDebounce = null;
+  searchInput.addEventListener('input', (e) => {
+    searchQuery = e.target.value;
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => {
+      renderHome();
+    }, 150);
+  });
+
+  // ============================================
+  // Select mode (batch operations — home + album detail)
+  // ============================================
+  const homeBatchBar = $('homeBatchBar');
+  const homeBatchCount = $('homeBatchCount');
+
+  function activeGridRenderer() {
+    return screenDetail.classList.contains('active') ? renderDetailGrid : renderHome;
+  }
+
+  function updateBatchCount() {
+    const label = `已選 ${selectedIds.size} 張`;
+    batchCount.textContent = label;
+    homeBatchCount.textContent = label;
+  }
+
+  function toggleSelectModeFor(screenName) {
+    selectMode = !selectMode;
+    if (!selectMode) selectedIds.clear();
+    batchBar.classList.toggle('active', selectMode && screenName === 'detail');
+    homeBatchBar.classList.toggle('active', selectMode && screenName === 'home');
+    updateBatchCount();
+    activeGridRenderer()();
+  }
+
+  $('selectModeBtn').addEventListener('click', () => toggleSelectModeFor('detail'));
+  $('homeSelectModeBtn').addEventListener('click', () => toggleSelectModeFor('home'));
+
+  function toggleSelect(id, el) {
+    if (selectedIds.has(id)) {
+      selectedIds.delete(id);
+      el.classList.remove('selected');
+    } else {
+      selectedIds.add(id);
+      el.classList.add('selected');
+    }
+    updateBatchCount();
+  }
+
+  function exitSelectMode() {
+    selectMode = false;
+    selectedIds.clear();
+    batchBar.classList.remove('active');
+    homeBatchBar.classList.remove('active');
+  }
+
+  $('batchCancel').addEventListener('click', () => { exitSelectMode(); renderDetailGrid(); });
+  $('homeBatchCancel').addEventListener('click', () => { exitSelectMode(); renderHome(); });
+
+  function runBatchDelete() {
+    if (selectedIds.size === 0) return;
+    openConfirmSheet(
+      `刪除 ${selectedIds.size} 張圖片？`,
+      '此動作無法復原。',
+      () => {
+        selectedIds.forEach(id => revokeBlobUrl(id));
+        images = images.filter(i => !selectedIds.has(i.id));
+        saveImages();
+        const renderFn = activeGridRenderer();
+        exitSelectMode();
+        renderFn();
+        showToast('已刪除');
+      }
+    );
+  }
+
+  function runBatchMove() {
+    if (selectedIds.size === 0) return;
+    openAlbumPickerSheet((targetAlbumId) => {
+      images.forEach(i => {
+        if (selectedIds.has(i.id)) i.albumId = targetAlbumId;
+      });
+      saveImages();
+      const renderFn = activeGridRenderer();
+      exitSelectMode();
+      renderFn();
+      showToast('已搬移');
+    });
+  }
+
+  $('batchDelete').addEventListener('click', runBatchDelete);
+  $('homeBatchDelete').addEventListener('click', runBatchDelete);
+  $('batchMove').addEventListener('click', runBatchMove);
+  $('homeBatchMove').addEventListener('click', runBatchMove);
+
+  // ============================================
+  // Viewer / Lightbox
+  // ============================================
+  function openViewer(index, source) {
+    viewerIndex = index;
+    viewerSource = source;
+    renderViewerFrame();
+    viewer.classList.add('open');
+  }
+
+  function closeViewer() {
+    viewer.classList.remove('open');
+  }
+
+  function renderViewerFrame() {
+    const img = currentGridList[viewerIndex];
+    if (!img) return closeViewer();
+    viewerImg.removeAttribute('src');
+    getBlobUrl(img).then(url => { viewerImg.src = url; }).catch(() => { viewerImg.src = img.dataUrl; });
+    viewerName.textContent = img.name;
+    viewerCounter.textContent = `${viewerIndex + 1} / ${currentGridList.length}`;
+    viewerFrame.style.backgroundColor = previewBg(img);
+
+    img.lastUsedAt = Date.now();
+    saveImages();
+  }
+
+  $('viewerClose').addEventListener('click', closeViewer);
+
+  let touchStartX = null;
+  $('viewerStage').addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+  }, { passive: true });
+  $('viewerStage').addEventListener('touchend', (e) => {
+    if (touchStartX === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 50) {
+      if (dx < 0 && viewerIndex < currentGridList.length - 1) {
+        viewerIndex++;
+        renderViewerFrame();
+      } else if (dx > 0 && viewerIndex > 0) {
+        viewerIndex--;
+        renderViewerFrame();
+      }
+    }
+    touchStartX = null;
+  }, { passive: true });
+
+  $('viewerCopyBtn').addEventListener('click', () => {
+    const img = currentGridList[viewerIndex];
+    if (!img) return;
+
+    // Safari requires ClipboardItem to be constructed synchronously within
+    // the click handler's call stack — awaiting fetch()/blob() first breaks
+    // the "user activation" link and silently fails. Passing a Promise<Blob>
+    // as the value lets the write stay tied to the gesture while the actual
+    // data resolves asynchronously.
+    const mimeMatch = img.dataUrl.match(/^data:([^;]+);/);
+    const mimeType = (mimeMatch && mimeMatch[1]) || 'image/png';
+    const blobPromise = fetch(img.dataUrl).then(r => r.blob());
+
+    navigator.clipboard.write([
+      new ClipboardItem({ [mimeType]: blobPromise })
+    ]).then(() => {
+      showToast('已複製到剪貼簿');
+      img.lastUsedAt = Date.now();
+      saveImages();
+    }).catch((err) => {
+      console.error('Clipboard write failed', err);
+      showToast('請改用長按圖片複製');
+    });
+  });
+
+  $('viewerInvertBtn').addEventListener('click', () => {
+    const img = currentGridList[viewerIndex];
+    if (!img) return;
+    const current = img.colorOverride || img.textColor || 'dark';
+    img.colorOverride = current === 'dark' ? 'light' : 'dark';
+    saveImages();
+    viewerFrame.style.backgroundColor = previewBg(img);
+  });
+
+  $('viewerMoveBtn').addEventListener('click', () => {
+    const img = currentGridList[viewerIndex];
+    if (!img) return;
+    openAlbumPickerSheet((targetAlbumId) => {
+      img.albumId = targetAlbumId;
+      saveImages();
+      showToast('已搬移相簿');
+      refreshCurrentGrid();
+    });
+  });
+
+  $('viewerRenameBtn').addEventListener('click', () => {
+    const img = currentGridList[viewerIndex];
+    if (!img) return;
+    openRenameSheet(img);
+  });
+
+  $('viewerDeleteBtn').addEventListener('click', () => {
+    const img = currentGridList[viewerIndex];
+    if (!img) return;
+    openConfirmSheet('刪除這張圖片？', '此動作無法復原。', () => {
+      revokeBlobUrl(img.id);
+      images = images.filter(i => i.id !== img.id);
+      saveImages();
+      closeViewer();
+      refreshCurrentGrid();
+      showToast('已刪除');
+    });
+  });
+
+  function refreshCurrentGrid() {
+    if (viewerSource === 'detail' && screenDetail.classList.contains('active')) {
+      renderDetailGrid();
+    } else {
+      renderHome();
+    }
+  }
+
+  // ============================================
+  // Bottom sheets
+  // ============================================
+  function openSheet(html) {
+    sheetContent.innerHTML = html;
+    sheetOverlay.classList.add('open');
+  }
+  function closeSheet() {
+    sheetOverlay.classList.remove('open');
+  }
+  sheetOverlay.addEventListener('click', (e) => {
+    if (e.target === sheetOverlay) closeSheet();
+  });
+
+  function openConfirmSheet(title, sub, onConfirm) {
+    openSheet(`
+      <div class="sheet-title">${escapeHtml(title)}</div>
+      <p class="sheet-hint">${escapeHtml(sub)}</p>
+      <div class="sheet-btn-row">
+        <button class="sheet-btn secondary" id="sheetCancelBtn">取消</button>
+        <button class="sheet-btn danger" id="sheetConfirmBtn">確定刪除</button>
+      </div>
+    `);
+    $('sheetCancelBtn').addEventListener('click', closeSheet);
+    $('sheetConfirmBtn').addEventListener('click', () => {
+      closeSheet();
+      onConfirm();
+    });
+  }
+
+  function openRenameSheet(img) {
+    openSheet(`
+      <div class="sheet-title">重新命名</div>
+      <input type="text" class="sheet-input" id="renameInput" value="${escapeHtml(img.name)}" maxlength="60">
+      <div class="sheet-btn-row">
+        <button class="sheet-btn secondary" id="sheetCancelBtn">取消</button>
+        <button class="sheet-btn primary" id="sheetSaveBtn">儲存</button>
+      </div>
+    `);
+    const input = $('renameInput');
+    setTimeout(() => { input.focus(); input.select(); }, 100);
+    $('sheetCancelBtn').addEventListener('click', closeSheet);
+    $('sheetSaveBtn').addEventListener('click', () => {
+      const val = input.value.trim();
+      if (val) {
+        img.name = val;
+        saveImages();
+        refreshCurrentGrid();
+        if (viewer.classList.contains('open')) renderViewerFrame();
+      }
+      closeSheet();
+    });
+  }
+
+  function openNewAlbumSheet(prefillCallback) {
+    openSheet(`
+      <div class="sheet-title">新增相簿</div>
+      <input type="text" class="sheet-input" id="newAlbumInput" placeholder="相簿名稱" maxlength="30">
+      <div class="sheet-btn-row">
+        <button class="sheet-btn secondary" id="sheetCancelBtn">取消</button>
+        <button class="sheet-btn primary" id="sheetCreateBtn">建立</button>
+      </div>
+    `);
+    const input = $('newAlbumInput');
+    setTimeout(() => input.focus(), 100);
+    $('sheetCancelBtn').addEventListener('click', closeSheet);
+    const create = () => {
+      const val = input.value.trim();
+      if (!val) return;
+      const album = { id: uid(), name: val, createdAt: Date.now() };
+      albums.push(album);
+      saveAlbums();
+      closeSheet();
+      if (screenAlbums.classList.contains('active')) renderAlbumList();
+      if (typeof prefillCallback === 'function') prefillCallback(album.id);
+    };
+    $('sheetCreateBtn').addEventListener('click', create);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') create(); });
+  }
+
+  function openAlbumPickerSheet(onPick) {
+    const items = albums.map(a => `
+      <button class="sheet-option" data-id="${a.id}">
+        <span class="opt-thumb">◇</span>
+        <span class="opt-label">${escapeHtml(a.name)}</span>
+      </button>
+    `).join('');
+
+    openSheet(`
+      <div class="sheet-title">選擇相簿</div>
+      <div class="sheet-option-list">
+        <button class="sheet-option" data-id="${UNSORTED_ID}">
+          <span class="opt-thumb">◇</span>
+          <span class="opt-label">未分類</span>
+        </button>
+        ${items}
+        <button class="sheet-option" id="createNewAlbumOption">
+          <span class="opt-thumb">＋</span>
+          <span class="opt-label">新增相簿…</span>
+        </button>
+      </div>
+    `);
+
+    sheetContent.querySelectorAll('.sheet-option[data-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        closeSheet();
+        onPick(btn.dataset.id);
+      });
+    });
+    $('createNewAlbumOption').addEventListener('click', () => {
+      openNewAlbumSheet((newAlbumId) => onPick(newAlbumId));
+    });
+  }
+
+  // ============================================
+  // Toast
+  // ============================================
+  let toastTimer = null;
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+  }
+
+  // ============================================
+  // Add images (upload flow)
+  // ============================================
+  $('fabAdd').addEventListener('click', () => triggerUpload(null));
+  $('fabAddToAlbum').addEventListener('click', () => {
+    const target = currentAlbumId || UNSORTED_ID;
+    triggerUpload(target);
+  });
+
+  function triggerUpload(albumId) {
+    pendingUploadAlbumId = albumId;
+    fileInput.click();
+  }
+
+  fileInput.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    showToast(`匯入 ${files.length} 張圖片中…`);
+    let added = 0;
+
+    for (const file of files) {
+      try {
+        const dataUrl = await readFileAsDataURL(file);
+        const { textColor, ratio } = await analyzeImage(dataUrl);
+        images.push({
+          id: uid(),
+          name: file.name.replace(/\.(png|webp)$/i, ''),
+          dataUrl,
+          albumId: pendingUploadAlbumId || UNSORTED_ID,
+          driveFileId: null,
+          textColor,
+          colorOverride: null,
+          ratio,
+          addedAt: Date.now(),
+          lastUsedAt: Date.now(),
+        });
+        added++;
+
+        if (DriveSync.connected) {
+          DriveSync.uploadFile(file).catch(err => console.error('Drive upload failed', err));
+        }
+      } catch (err) {
+        console.error('讀取失敗', file.name, err);
+      }
+    }
+
+    if (added > 0) {
+      const ok = saveImages();
+      if (ok) {
+        showToast(`已新增 ${added} 張`);
+        if (screenHome.classList.contains('active')) renderHome();
+        if (screenAlbums.classList.contains('active')) renderAlbumList();
+        if (screenDetail.classList.contains('active')) renderDetailGrid();
+      }
+    }
+    fileInput.value = '';
+    pendingUploadAlbumId = null;
+  });
+
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // ============================================
+  // Drive connect button
+  // ============================================
+  driveStatusBtn.addEventListener('click', async () => {
+    if (!DriveSync.isConfigured()) {
+      showToast('尚未設定 Google Drive API 金鑰');
+      return;
+    }
+    if (DriveSync.connected) {
+      openConfirmSheet('中斷 Google Drive 連接？', '本機圖片不會被刪除。', () => {
+        DriveSync.disconnect();
+      });
+      return;
+    }
+    try {
+      await DriveSync.requestAccess();
+      showToast('已連接 Google Drive');
+      syncFromDrive();
+    } catch (err) {
+      showToast('連接失敗，請再試一次');
+    }
+  });
+
+  DriveSync.on('statusChange', ({ connected }) => {
+    driveStatusBtn.dataset.connected = String(connected);
+  });
+
+  async function syncFromDrive() {
+    if (!DriveSync.connected) return;
+    try {
+      const files = await DriveSync.listFiles();
+      const existingIds = new Set(images.map(i => i.driveFileId).filter(Boolean));
+      const newOnes = files.filter(f => !existingIds.has(f.id));
+      if (newOnes.length === 0) return;
+
+      showToast(`從 Drive 讀取 ${newOnes.length} 張新圖片…`);
+      for (const f of newOnes) {
+        try {
+          const blob = await DriveSync.fetchFileBlob(f.id);
+          const dataUrl = await blobToDataURL(blob);
+          const { textColor, ratio } = await analyzeImage(dataUrl);
+          images.push({
+            id: uid(),
+            name: f.name.replace(/\.(png|webp)$/i, ''),
+            dataUrl,
+            albumId: UNSORTED_ID,
+            driveFileId: f.id,
+            textColor,
+            colorOverride: null,
+            ratio,
+            addedAt: Date.now(),
+            lastUsedAt: Date.now(),
+          });
+        } catch (err) {
+          console.error('讀取 Drive 檔案失敗', f.name, err);
+        }
+      }
+      saveImages();
+      if (screenHome.classList.contains('active')) renderHome();
+      if (screenAlbums.classList.contains('active')) renderAlbumList();
+      if (screenDetail.classList.contains('active')) renderDetailGrid();
+    } catch (err) {
+      console.error('Drive 同步失敗', err);
+    }
+  }
+
+  function blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  // ============================================
+  // Init
+  // ============================================
+  async function init() {
+    renderHome();
+    const ok = await DriveSync.init();
+    if (ok && DriveSync.connected) {
+      driveStatusBtn.dataset.connected = 'true';
+      syncFromDrive();
+    }
+  }
+
+  init();
+
+})();
+
+</script>
+</body>
+</html>
