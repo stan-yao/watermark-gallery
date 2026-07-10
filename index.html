@@ -711,6 +711,9 @@ button { font-family: inherit; }
       <div class="topbar-title-row">
         <h1 class="app-title">Watermark<br>Gallery</h1>
         <div class="topbar-btns">
+          <button id="sortModeBtn" class="icon-pill" aria-label="排序方式">
+            <svg id="sortModeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
           <button id="homeSelectModeBtn" class="icon-pill" aria-label="多選">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="2"/></svg>
           </button>
@@ -1410,6 +1413,19 @@ const DriveSync = (() => {
   let selectedIds = new Set();
   let searchQuery = '';
 
+  // 'recent' = most recently viewed/copied first (images jump to front as
+  // you browse); 'uploaded' = fixed order by upload time, newest first —
+  // doesn't reorder as you view images, which is steadier for browsing.
+  const SORT_MODE_KEY = 'wmg_sort_mode';
+  let sortMode = localStorage.getItem(SORT_MODE_KEY) === 'uploaded' ? 'uploaded' : 'recent';
+
+  function sortImages(imgs) {
+    if (sortMode === 'uploaded') {
+      return [...imgs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+    }
+    return [...imgs].sort((a, b) => (b.lastUsedAt || b.addedAt) - (a.lastUsedAt || a.addedAt));
+  }
+
   // ---------- DOM refs ----------
   const $ = (id) => document.getElementById(id);
   const screenHome = $('screen-home');
@@ -1433,6 +1449,8 @@ const DriveSync = (() => {
   const detailEmpty = $('detailEmpty');
 
   const searchInput = $('searchInput');
+  const sortModeBtn = $('sortModeBtn');
+  const sortModeIcon = $('sortModeIcon');
   const fileInput = $('fileInput');
   const driveStatusBtn = $('driveStatusBtn');
 
@@ -1463,7 +1481,7 @@ const DriveSync = (() => {
       imgs = imgs.filter(i => i.name.toLowerCase().includes(q));
     }
 
-    imgs.sort((a, b) => (b.lastUsedAt || b.addedAt) - (a.lastUsedAt || a.addedAt));
+    imgs = sortImages(imgs);
 
     currentGridList = imgs;
     masonryColA.innerHTML = '';
@@ -1586,7 +1604,7 @@ const DriveSync = (() => {
     detailTitle.textContent = albumName(currentAlbumId);
     let imgs = getAlbumImages(currentAlbumId);
 
-    imgs = [...imgs].sort((a, b) => (b.lastUsedAt || b.addedAt) - (a.lastUsedAt || a.addedAt));
+    imgs = sortImages(imgs);
 
     currentGridList = imgs;
     detailCount.textContent = `${imgs.length} 張`;
@@ -1636,6 +1654,29 @@ const DriveSync = (() => {
     searchDebounce = setTimeout(() => {
       renderHome();
     }, 150);
+  });
+
+  // ============================================
+  // Sort mode toggle (home + album detail)
+  // ============================================
+  const SORT_ICONS = {
+    recent: '<path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>',
+    uploaded: '<path d="M7 3v4M17 3v4M4 9h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+  };
+
+  function updateSortIcon() {
+    sortModeIcon.innerHTML = SORT_ICONS[sortMode];
+    sortModeBtn.setAttribute('aria-label', sortMode === 'uploaded' ? '排序：上傳時間' : '排序：最近使用');
+  }
+  updateSortIcon();
+
+  sortModeBtn.addEventListener('click', () => {
+    sortMode = sortMode === 'uploaded' ? 'recent' : 'uploaded';
+    localStorage.setItem(SORT_MODE_KEY, sortMode);
+    updateSortIcon();
+    showToast(sortMode === 'uploaded' ? '已切換為上傳時間排序' : '已切換為最近使用排序');
+    if (screenHome.classList.contains('active')) renderHome();
+    if (screenDetail.classList.contains('active')) renderDetailGrid();
   });
 
   // ============================================
