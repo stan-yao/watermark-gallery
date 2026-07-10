@@ -844,6 +844,7 @@ button { font-family: inherit; }
         </button>
         <button id="viewerInvertBtn" class="viewer-action" aria-label="反轉顏色">
           <svg id="viewerInvertIcon" width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 000 18z" fill="currentColor"/></svg>
+          反轉顏色
         </button>
         <button id="viewerMoveBtn" class="viewer-action">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 7h18M3 7l3-4h12l3 4M3 7v12a1 1 0 001 1h16a1 1 0 001-1V7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1886,8 +1887,7 @@ const DriveSync = (() => {
       // Switch back to the original — already have it, no computation needed
       img.activeVariant = 'original';
       saveImages();
-      renderViewerFrame();
-      refreshCurrentGrid();
+      if (refreshCurrentGridAndResync(img.id)) renderViewerFrame();
       return;
     }
 
@@ -1905,8 +1905,7 @@ const DriveSync = (() => {
     }
     img.activeVariant = 'inverted';
     saveImages();
-    renderViewerFrame();
-    refreshCurrentGrid();
+    if (refreshCurrentGridAndResync(img.id)) renderViewerFrame();
   });
 
   $('viewerMoveBtn').addEventListener('click', () => {
@@ -1916,7 +1915,7 @@ const DriveSync = (() => {
       img.albumId = targetAlbumId;
       saveImages();
       showToast('已搬移相簿');
-      refreshCurrentGrid();
+      if (refreshCurrentGridAndResync(img.id)) renderViewerFrame();
     });
   });
 
@@ -1945,6 +1944,23 @@ const DriveSync = (() => {
     } else {
       renderHome();
     }
+  }
+
+  // Re-renders the underlying grid (which may reorder by recency, or drop
+  // the image entirely if it moved to a different album) and re-locates
+  // the image by id afterward, since a plain numeric viewerIndex would
+  // otherwise silently point at a different image once the list reorders.
+  // Returns false (and closes the viewer) if the image is no longer part
+  // of the current grid context.
+  function refreshCurrentGridAndResync(imageId) {
+    refreshCurrentGrid();
+    const idx = currentGridList.findIndex(i => i.id === imageId);
+    if (idx === -1) {
+      if (viewer.classList.contains('open')) closeViewer();
+      return false;
+    }
+    viewerIndex = idx;
+    return true;
   }
 
   // ============================================
@@ -1994,8 +2010,7 @@ const DriveSync = (() => {
       if (val) {
         img.name = val;
         saveImages();
-        refreshCurrentGrid();
-        if (viewer.classList.contains('open')) renderViewerFrame();
+        if (refreshCurrentGridAndResync(img.id)) renderViewerFrame();
       }
       closeSheet();
     });
